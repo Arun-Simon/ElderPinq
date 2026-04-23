@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS alerts (
+  id SERIAL PRIMARY KEY,
+  service_name VARCHAR(50) NOT NULL,
+  message TEXT NOT NULL,
+  severity VARCHAR(20) DEFAULT 'info',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

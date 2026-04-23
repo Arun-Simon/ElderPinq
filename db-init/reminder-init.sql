@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS reminders (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL,
+  medication_name VARCHAR(100) NOT NULL,
+  dosage VARCHAR(50) NOT NULL,
+  time_of_day TIME NOT NULL,
+  taken BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
