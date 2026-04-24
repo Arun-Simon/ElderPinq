@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Pill, HeartPulse, LogOut, Clock, User, Smile, Users } from 'lucide-react';
+import { CheckCircle2, Pill, HeartPulse, LogOut, Clock, User, Smile, Users, Activity } from 'lucide-react';
 import { getCachedUser, logout, getLinkedFamily } from '../api/authApi';
-import { checkIn } from '../api/healthApi';
+import { checkIn, logVitals } from '../api/healthApi';
 import { getReminders, markTaken } from '../api/reminderApi';
 
 export default function ElderDashboard() {
@@ -13,10 +13,14 @@ export default function ElderDashboard() {
   const [linkedFamily, setLinkedFamily]   = useState([]);
   const [checkedIn, setCheckedIn]         = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
+  const [vitalsLoading, setVitalsLoading]   = useState(false);
   const [medLoading, setMedLoading]       = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType]       = useState('success');
   const [time, setTime]                   = useState(new Date());
+  
+  // Vitals form
+  const [vitalsForm, setVitalsForm] = useState({ heartRate: '', bloodPressure: '' });
   const [remindersError, setRemindersError] = useState('');
 
   // Redirect if not logged in or wrong role
@@ -61,6 +65,21 @@ export default function ElderDashboard() {
       showStatus(`⚠️ ${err.message}`, 'error');
     } finally {
       setCheckInLoading(false);
+    }
+  };
+
+  const handleLogVitals = async (e) => {
+    e.preventDefault();
+    if (!vitalsForm.heartRate || !vitalsForm.bloodPressure) return;
+    setVitalsLoading(true);
+    try {
+      await logVitals(user.id, parseInt(vitalsForm.heartRate), vitalsForm.bloodPressure);
+      setVitalsForm({ heartRate: '', bloodPressure: '' });
+      showStatus('💓 Vitals successfully recorded!', 'success');
+    } catch (err) {
+      showStatus(`⚠️ ${err.message}`, 'error');
+    } finally {
+      setVitalsLoading(false);
     }
   };
 
@@ -153,33 +172,72 @@ export default function ElderDashboard() {
           </div>
         )}
 
-        {/* BIG Check-In Button */}
-        <div className="mb-8 transform transition-all hover:scale-[1.02]">
-          <button
-            id="checkin-btn"
-            onClick={handleCheckIn}
-            disabled={checkedIn || checkInLoading}
-            className={`w-full py-12 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 shadow-2xl text-white text-3xl font-extrabold transition-all border border-white/20 relative overflow-hidden ${
-              checkedIn
-                ? 'bg-gradient-to-br from-green-500 to-emerald-600 cursor-default shadow-green-500/30'
-                : 'bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 hover:shadow-indigo-500/40 active:scale-95'
-            }`}
-          >
-            {/* Decorative background element */}
-            <div className="absolute -top-24 -right-24 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl pointer-events-none"></div>
-            
-            {checkInLoading ? (
-              <span className="animate-spin w-16 h-16 border-4 border-white/30 border-t-white rounded-full" />
-            ) : (
-              <CheckCircle2 className="w-20 h-20 drop-shadow-md" strokeWidth={2} />
-            )}
-            <span className="drop-shadow-md">{checkedIn ? 'Checked In! ✓' : checkInLoading ? 'Sending…' : "I'm Doing Well"}</span>
-            <span className="text-lg font-medium opacity-90 tracking-wide drop-shadow-sm">
-              {checkedIn
-                ? 'Your family knows you are safe.'
-                : 'Tap to let your family know'}
-            </span>
-          </button>
+        {/* BIG Check-In Button & Vitals Form */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="transform transition-all hover:scale-[1.02] h-full">
+            <button
+              id="checkin-btn"
+              onClick={handleCheckIn}
+              disabled={checkedIn || checkInLoading}
+              className={`w-full h-full py-12 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 shadow-2xl text-white text-3xl font-extrabold transition-all border border-white/20 relative overflow-hidden ${
+                checkedIn
+                  ? 'bg-gradient-to-br from-green-500 to-emerald-600 cursor-default shadow-green-500/30'
+                  : 'bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 hover:shadow-indigo-500/40 active:scale-95'
+              }`}
+            >
+              {/* Decorative background element */}
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl pointer-events-none"></div>
+              
+              {checkInLoading ? (
+                <span className="animate-spin w-16 h-16 border-4 border-white/30 border-t-white rounded-full" />
+              ) : (
+                <CheckCircle2 className="w-20 h-20 drop-shadow-md" strokeWidth={2} />
+              )}
+              <span className="drop-shadow-md">{checkedIn ? 'Checked In! ✓' : checkInLoading ? 'Sending…' : "I'm Doing Well"}</span>
+              <span className="text-lg font-medium opacity-90 tracking-wide drop-shadow-sm text-center px-4">
+                {checkedIn
+                  ? 'Your family knows you are safe.'
+                  : 'Tap to let your family know'}
+              </span>
+            </button>
+          </div>
+
+          <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-xl p-8 border border-white/60 h-full flex flex-col justify-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <Activity className="w-7 h-7 text-pink-500" /> Log Vitals
+            </h2>
+            <form onSubmit={handleLogVitals} className="flex flex-col gap-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-600 mb-2 uppercase tracking-wide">Heart Rate (bpm)</label>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 72" 
+                  value={vitalsForm.heartRate} 
+                  onChange={e => setVitalsForm({...vitalsForm, heartRate: e.target.value})} 
+                  className="w-full bg-gray-50 border-2 border-indigo-100 rounded-2xl px-5 py-4 text-xl font-bold text-gray-800 focus:outline-none focus:border-indigo-400 transition-colors" 
+                  required 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-600 mb-2 uppercase tracking-wide">Blood Pressure</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. 120/80" 
+                  value={vitalsForm.bloodPressure} 
+                  onChange={e => setVitalsForm({...vitalsForm, bloodPressure: e.target.value})} 
+                  className="w-full bg-gray-50 border-2 border-indigo-100 rounded-2xl px-5 py-4 text-xl font-bold text-gray-800 focus:outline-none focus:border-indigo-400 transition-colors" 
+                  required 
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={vitalsLoading}
+                className="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-xl py-4 rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 mt-2"
+              >
+                {vitalsLoading ? 'Saving...' : 'Save Vitals'}
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Medications */}
