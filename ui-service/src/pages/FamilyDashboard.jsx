@@ -4,7 +4,7 @@ import {
   HeartPulse, Bell, CheckCircle2, XCircle, Pill, TrendingUp,
   User, LogOut, RefreshCw, AlertTriangle, Clock
 } from 'lucide-react';
-import { getCachedUser, logout } from '../api/authApi';
+import { getCachedUser, logout, getUserById } from '../api/authApi';
 import { getVitals } from '../api/healthApi';
 import { getReminders } from '../api/reminderApi';
 import { getAlerts } from '../api/alertApi';
@@ -45,6 +45,7 @@ export default function FamilyDashboard() {
   const [healthLogs, setHealthLogs]   = useState([]);
   const [reminders, setReminders]     = useState([]);
   const [alerts, setAlerts]           = useState([]);
+  const [elderName, setElderName]     = useState('');
   const [loading, setLoading]         = useState(true);
   const [fetchError, setFetchError]   = useState('');
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -58,16 +59,20 @@ export default function FamilyDashboard() {
     setLoading(true);
     setFetchError('');
     try {
-      // Run all three fetches concurrently; surface individual errors
-      const [hResult, rResult, aResult] = await Promise.allSettled([
+      // Run all fetches concurrently; surface individual errors
+      const [hResult, rResult, aResult, uResult] = await Promise.allSettled([
         getVitals(ELDER_USER_ID),
         getReminders(ELDER_USER_ID),
         getAlerts(),
+        getUserById(ELDER_USER_ID)
       ]);
 
       if (hResult.status === 'fulfilled') setHealthLogs(hResult.value);
       if (rResult.status === 'fulfilled') setReminders(rResult.value);
       if (aResult.status === 'fulfilled') setAlerts(aResult.value);
+      if (uResult.status === 'fulfilled' && uResult.value?.username) {
+        setElderName(uResult.value.username);
+      }
 
       // Show a warning if any service failed
       const failed = [hResult, rResult, aResult]
@@ -129,7 +134,9 @@ export default function FamilyDashboard() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <p className="text-gray-500 text-sm">Monitoring</p>
-            <h1 className="text-4xl font-extrabold text-gray-900">Elder Health Status</h1>
+            <h1 className="text-4xl font-extrabold text-gray-900 capitalize">
+              {elderName ? `${elderName}'s Health Status` : 'Elder Health Status'}
+            </h1>
           </div>
           <div className="text-right text-sm text-gray-400 flex items-center gap-1">
             <Clock className="w-4 h-4" />

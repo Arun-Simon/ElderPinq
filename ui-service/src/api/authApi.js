@@ -25,6 +25,11 @@ export const login = async (username, password) => {
  */
 export const getMe = () => client.get(`${BASE}/me`);
 
+/**
+ * Fetch user details by ID
+ */
+export const getUserById = (id) => client.get(`${BASE}/users/${id}`);
+
 /** Clear localStorage session */
 export const logout = () => {
   localStorage.removeItem('token');
