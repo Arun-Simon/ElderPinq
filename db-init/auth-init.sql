@@ -9,3 +9,11 @@ CREATE TABLE IF NOT EXISTS users (
   role       VARCHAR(20) DEFAULT 'family', -- 'elder' | 'family'
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS family_links (
+  id         SERIAL PRIMARY KEY,
+  family_id  INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  elder_id   INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(family_id, elder_id)
+);

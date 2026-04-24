@@ -66,21 +66,23 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-6 font-sans">
       <div className="w-full max-w-md">
 
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-full shadow-2xl mb-4">
-            <HeartPulse className="w-14 h-14 text-blue-700" strokeWidth={1.5} />
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-white/20 backdrop-blur-md rounded-full shadow-xl mb-4 border border-white/30">
+            <HeartPulse className="w-14 h-14 text-white" strokeWidth={1.5} />
           </div>
-          <h1 className="text-5xl font-extrabold text-white tracking-tight">ElderPing</h1>
-          <p className="text-blue-200 mt-2 text-xl">Your Daily Care Companion</p>
+          <h1 className="text-5xl font-extrabold text-white tracking-tight drop-shadow-lg">ElderPing</h1>
+          <p className="text-white/80 mt-2 text-xl font-medium">Your Daily Care Companion</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-3xl shadow-2xl p-10">
-          <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">Sign In</h2>
+        <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-2xl p-10 border border-white/50 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 to-pink-500"></div>
+          
+          <h2 className="text-3xl font-extrabold text-gray-800 mb-8 text-center tracking-tight">Welcome Back</h2>
 
           {error && (
             <div
@@ -139,23 +141,23 @@ export default function Login() {
               id="login-submit"
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-blue-400 text-white text-2xl font-bold py-5 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg"
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-indigo-400 disabled:to-purple-400 text-white text-xl font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               {loading ? (
-                <span className="animate-spin inline-block w-6 h-6 border-4 border-white border-t-transparent rounded-full" />
+                <span className="animate-spin inline-block w-6 h-6 border-4 border-white/30 border-t-white rounded-full" />
               ) : (
-                <LogIn className="w-7 h-7" />
+                <LogIn className="w-6 h-6" />
               )}
               {loading ? 'Signing In…' : 'Sign In'}
             </button>
           </form>
 
-          <p className="text-center text-gray-500 text-lg mt-8">
+          <p className="text-center text-gray-600 text-lg mt-8 font-medium">
             Don&apos;t have an account?{' '}
             <Link
               id="go-to-register"
               to="/register"
-              className="text-blue-700 font-bold hover:underline"
+              className="text-indigo-600 font-bold hover:text-indigo-800 transition-colors"
             >
               Register here
             </Link>

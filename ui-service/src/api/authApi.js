@@ -30,6 +30,15 @@ export const getMe = () => client.get(`${BASE}/me`);
  */
 export const getUserById = (id) => client.get(`${BASE}/users/${id}`);
 
+/** Link family to elder by username */
+export const linkElder = (elderUsername) => client.post(`${BASE}/link`, { elderUsername });
+
+/** Get all elders linked to the logged-in family member */
+export const getLinkedElders = () => client.get(`${BASE}/links/elders`);
+
+/** Get all family members linked to the logged-in elder */
+export const getLinkedFamily = () => client.get(`${BASE}/links/family`);
+
 /** Clear localStorage session */
 export const logout = () => {
   localStorage.removeItem('token');

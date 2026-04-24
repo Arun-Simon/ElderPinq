@@ -2,23 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   HeartPulse, Bell, CheckCircle2, XCircle, Pill, TrendingUp,
-  User, LogOut, RefreshCw, AlertTriangle, Clock
+  User, LogOut, RefreshCw, AlertTriangle, Clock, Link as LinkIcon, Plus
 } from 'lucide-react';
-import { getCachedUser, logout, getUserById } from '../api/authApi';
+import { getCachedUser, logout, getLinkedElders, linkElder, getUserById } from '../api/authApi';
 import { getVitals } from '../api/healthApi';
-import { getReminders } from '../api/reminderApi';
+import { addReminder, getReminders } from '../api/reminderApi';
 import { getAlerts } from '../api/alertApi';
-
-// In a real app this would come from a "linked elder" profile.
-// For demo purposes the elder is the first user registered with role='elder'.
-// The family member selects whose data to view; here we default to userId=1.
-const ELDER_USER_ID = 1;
 
 function StatusBadge({ status }) {
   const ok = status === 'feeling_well' || status === 'vitals_logged';
   return (
     <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
-      ok ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+      ok ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
     }`}>
       {ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
       {ok ? 'Well' : 'Needs Attention'}
@@ -26,14 +21,16 @@ function StatusBadge({ status }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }) {
+function StatCard({ icon: Icon, label, value, bgGradient, iconColor }) {
   return (
-    <div className={`bg-white rounded-2xl shadow p-5 border-t-4 ${color}`}>
+    <div className={`rounded-2xl shadow-lg p-6 bg-gradient-to-br ${bgGradient} border border-white/40`}>
       <div className="flex items-center gap-3 mb-2">
-        <Icon className="w-6 h-6 text-gray-500" />
-        <p className="text-gray-500 font-medium text-sm uppercase tracking-wide">{label}</p>
+        <div className={`p-2 rounded-lg bg-white/60 ${iconColor}`}>
+          <Icon className="w-6 h-6" />
+        </div>
+        <p className="text-gray-700 font-bold text-sm uppercase tracking-wide">{label}</p>
       </div>
-      <p className="text-3xl font-extrabold text-gray-800">{value ?? '—'}</p>
+      <p className="text-4xl font-extrabold text-gray-900 mt-2">{value ?? '—'}</p>
     </div>
   );
 }
@@ -42,29 +39,58 @@ export default function FamilyDashboard() {
   const navigate = useNavigate();
   const user = getCachedUser();
 
+  const [elders, setElders] = useState([]);
+  const [selectedElderId, setSelectedElderId] = useState(null);
+  const [elderName, setElderName] = useState('');
+
   const [healthLogs, setHealthLogs]   = useState([]);
   const [reminders, setReminders]     = useState([]);
   const [alerts, setAlerts]           = useState([]);
-  const [elderName, setElderName]     = useState('');
   const [loading, setLoading]         = useState(true);
   const [fetchError, setFetchError]   = useState('');
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
+  // Link form
+  const [linkUsername, setLinkUsername] = useState('');
+  const [linkLoading, setLinkLoading] = useState(false);
+
+  // Add Med form
+  const [medForm, setMedForm] = useState({ name: '', dosage: '', time: '08:00' });
+  const [medLoading, setMedLoading] = useState(false);
+
   // Redirect if not logged in
   useEffect(() => {
-    if (!user) navigate('/login', { replace: true });
+    if (!user || user.role !== 'family') navigate('/login', { replace: true });
   }, []);
 
+  const fetchElders = useCallback(async () => {
+    try {
+      const data = await getLinkedElders();
+      setElders(data);
+      if (data.length > 0 && !selectedElderId) {
+        setSelectedElderId(data[0].id);
+        setElderName(data[0].username);
+      }
+    } catch (err) {
+      setFetchError("Could not load linked elders.");
+    }
+  }, [selectedElderId]);
+
+  useEffect(() => { fetchElders(); }, [fetchElders]);
+
   const fetchData = useCallback(async () => {
+    if (!selectedElderId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setFetchError('');
     try {
-      // Run all fetches concurrently; surface individual errors
       const [hResult, rResult, aResult, uResult] = await Promise.allSettled([
-        getVitals(ELDER_USER_ID),
-        getReminders(ELDER_USER_ID),
+        getVitals(selectedElderId),
+        getReminders(selectedElderId),
         getAlerts(),
-        getUserById(ELDER_USER_ID)
+        getUserById(selectedElderId)
       ]);
 
       if (hResult.status === 'fulfilled') setHealthLogs(hResult.value);
@@ -74,7 +100,6 @@ export default function FamilyDashboard() {
         setElderName(uResult.value.username);
       }
 
-      // Show a warning if any service failed
       const failed = [hResult, rResult, aResult]
         .filter((r) => r.status === 'rejected')
         .map((r) => r.reason?.message);
@@ -85,9 +110,52 @@ export default function FamilyDashboard() {
       setLastRefresh(new Date());
       setLoading(false);
     }
-  }, []);
+  }, [selectedElderId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleLinkElder = async (e) => {
+    e.preventDefault();
+    if (!linkUsername) return;
+    setLinkLoading(true);
+    try {
+      const res = await linkElder(linkUsername);
+      setLinkUsername('');
+      await fetchElders();
+      setSelectedElderId(res.data?.elderId || res.elderId); // Handle axios response structure correctly
+    } catch (err) {
+      alert("Failed to link elder: " + (err.response?.data?.error || err.message));
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
+  const handleAddMed = async (e) => {
+    e.preventDefault();
+    if (!selectedElderId || !medForm.name || !medForm.dosage || !medForm.time) return;
+    setMedLoading(true);
+    try {
+      await addReminder({
+        userId: selectedElderId,
+        medicationName: medForm.name,
+        dosage: medForm.dosage,
+        timeOfDay: medForm.time + ':00' // backend expects time string
+      });
+      setMedForm({ name: '', dosage: '', time: '08:00' });
+      fetchData(); // refresh meds
+    } catch (err) {
+      alert("Failed to add medication: " + (err.response?.data?.error || err.message));
+    } finally {
+      setMedLoading(false);
+    }
+  };
+
+  const handleElderChange = (e) => {
+    const id = parseInt(e.target.value);
+    setSelectedElderId(id);
+    const elder = elders.find(el => el.id === id);
+    if(elder) setElderName(elder.username);
+  };
 
   const latestLog  = healthLogs[0];
   const medsTaken  = reminders.filter((r) => r.taken).length;
@@ -99,175 +167,253 @@ export default function FamilyDashboard() {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-pink-50 font-sans pb-10">
       {/* Header */}
-      <header className="bg-indigo-900 text-white px-6 py-5 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-3">
-          <HeartPulse className="w-8 h-8 text-indigo-300" />
-          <span className="text-2xl font-extrabold">ElderPing</span>
-          <span className="ml-2 bg-indigo-700 text-indigo-200 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest">
+      <header className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 text-white px-6 py-5 flex items-center justify-between shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 to-indigo-500"></div>
+        <div className="flex items-center gap-3 relative z-10">
+          <HeartPulse className="w-10 h-10 text-pink-400" />
+          <span className="text-3xl font-extrabold tracking-tight drop-shadow-md">ElderPing</span>
+          <span className="ml-3 bg-white/20 backdrop-blur-md text-white text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest border border-white/30 hidden sm:inline">
             Family View
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 relative z-10">
           <button
-            id="refresh-btn"
             onClick={fetchData}
-            disabled={loading}
-            className="flex items-center gap-2 bg-indigo-700 hover:bg-indigo-600 px-4 py-2 rounded-xl font-semibold transition-colors"
+            disabled={loading || !selectedElderId}
+            className="flex items-center gap-2 bg-indigo-600/50 hover:bg-indigo-600 backdrop-blur-md px-4 py-2.5 rounded-xl font-semibold transition-all shadow-md border border-white/10"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
-            id="family-logout-btn"
             onClick={handleLogout}
-            className="flex items-center gap-2 hover:text-indigo-300 transition-colors"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md px-5 py-2.5 rounded-xl font-semibold transition-all shadow-md border border-white/20"
           >
-            <LogOut className="w-5 h-5" /> Sign Out
+            <LogOut className="w-5 h-5" /> <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        {/* Title row */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <p className="text-gray-500 text-sm">Monitoring</p>
-            <h1 className="text-4xl font-extrabold text-gray-900 capitalize">
-              {elderName ? `${elderName}'s Health Status` : 'Elder Health Status'}
-            </h1>
-          </div>
-          <div className="text-right text-sm text-gray-400 flex items-center gap-1">
-            <Clock className="w-4 h-4" />
-            Last updated: {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </div>
-        </div>
-
-        {/* Partial error banner */}
-        {fetchError && (
-          <div className="mb-6 bg-yellow-50 border-2 border-yellow-400 text-yellow-800 rounded-xl p-4 text-base font-medium">
-            ⚠️ {fetchError}
-          </div>
-        )}
-
-        {/* Status hero card */}
-        <div className={`rounded-3xl shadow-lg p-8 mb-8 flex items-center justify-between text-white ${
-          loading
-            ? 'bg-gray-400'
-            : latestLog
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-              : 'bg-gradient-to-r from-gray-500 to-gray-600'
-        }`}>
-          <div className="flex items-center gap-5">
-            <div className="bg-white/20 rounded-full p-5">
-              <User className="w-12 h-12" />
-            </div>
-            <div>
-              <p className="text-lg opacity-80">Overall Status</p>
-              <p className="text-5xl font-extrabold mt-1">
-                {loading ? '⏳ Loading…' : latestLog ? '😊 Doing Well' : '❓ No Data Yet'}
-              </p>
-              {latestLog && (
-                <p className="opacity-75 text-sm mt-1">
-                  Last check-in: {new Date(latestLog.created_at).toLocaleString()}
-                </p>
-              )}
-            </div>
-          </div>
-          {latestLog && !loading && <CheckCircle2 className="w-20 h-20 opacity-30" />}
-        </div>
-
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatCard icon={HeartPulse} label="Heart Rate"       value={latestHR ? `${latestHR} bpm` : null} color="border-red-400" />
-          <StatCard icon={TrendingUp} label="Blood Pressure"   value={latestBP}                             color="border-blue-400" />
-          <StatCard icon={CheckCircle2} label="Check-ins Today" value={checkIns}                           color="border-green-400" />
-          <StatCard icon={Pill}       label="Meds Taken"       value={medsTotal > 0 ? `${medsTaken}/${medsTotal}` : '—'} color="border-purple-400" />
-        </div>
-
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        
+        {/* Top Controls: Link Elder & Select Elder */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Medication tracker */}
-          <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-            <div className="bg-purple-700 px-5 py-4 flex items-center gap-2">
-              <Pill className="w-6 h-6 text-purple-200" />
-              <h2 className="text-xl font-bold text-white">Medication Tracker</h2>
-            </div>
-            {reminders.length === 0 ? (
-              <p className="text-gray-400 text-center py-10">
-                {loading ? 'Loading…' : 'No medications scheduled.'}
-              </p>
+          
+          <div className="bg-white/80 backdrop-blur-lg rounded-[2rem] p-6 shadow-lg border border-white/60">
+            <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+              <User className="w-5 h-5 text-indigo-600" /> Monitoring Elder
+            </h3>
+            {elders.length === 0 ? (
+              <p className="text-gray-500 italic">No elders linked yet.</p>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {reminders.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between px-5 py-4">
-                    <div>
-                      <p className="font-bold text-gray-800">{r.medication_name}</p>
-                      <p className="text-sm text-gray-500">{r.dosage} &bull; {r.time_of_day?.slice(0, 5)}</p>
-                    </div>
-                    {r.taken
-                      ? <span className="flex items-center gap-1 text-green-600 font-semibold text-sm"><CheckCircle2 className="w-5 h-5" /> Taken</span>
-                      : <span className="flex items-center gap-1 text-yellow-600 font-semibold text-sm"><XCircle className="w-5 h-5" /> Pending</span>
-                    }
-                  </li>
-                ))}
-              </ul>
+              <select 
+                value={selectedElderId || ''} 
+                onChange={handleElderChange}
+                className="w-full bg-gray-50 border-2 border-indigo-100 rounded-xl px-4 py-3 text-lg font-bold text-gray-800 focus:outline-none focus:border-indigo-500 transition-colors"
+              >
+                {elders.map(e => <option key={e.id} value={e.id}>{e.username}</option>)}
+              </select>
             )}
           </div>
 
-          {/* Health log feed */}
-          <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-            <div className="bg-blue-700 px-5 py-4 flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-blue-200" />
-              <h2 className="text-xl font-bold text-white">Recent Health Logs</h2>
-            </div>
-            {healthLogs.length === 0 ? (
-              <p className="text-gray-400 text-center py-10">
-                {loading ? 'Loading…' : 'No health logs yet.'}
-              </p>
-            ) : (
-              <ul className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-                {healthLogs.map((log) => (
-                  <li key={log.id} className="flex items-center justify-between px-5 py-4">
-                    <div>
-                      <StatusBadge status={log.status} />
-                      {log.heart_rate && (
-                        <p className="text-sm text-gray-500 mt-1">
-                          HR: {log.heart_rate} bpm &bull; BP: {log.blood_pressure}
-                        </p>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-[2rem] p-6 shadow-lg text-white">
+            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <LinkIcon className="w-5 h-5" /> Link New Elder
+            </h3>
+            <form onSubmit={handleLinkElder} className="flex gap-3">
+              <input 
+                type="text" 
+                placeholder="Elder's username" 
+                value={linkUsername}
+                onChange={e => setLinkUsername(e.target.value)}
+                className="flex-1 rounded-xl px-4 py-3 text-gray-900 font-medium focus:outline-none focus:ring-4 focus:ring-indigo-300"
+              />
+              <button 
+                type="submit" 
+                disabled={linkLoading}
+                className="bg-white text-indigo-700 hover:bg-indigo-50 font-bold px-6 py-3 rounded-xl transition-colors shadow-md disabled:opacity-50"
+              >
+                {linkLoading ? 'Linking…' : 'Link'}
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* Alerts */}
-        {alerts.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-            <div className="bg-red-700 px-5 py-4 flex items-center gap-2">
-              <Bell className="w-6 h-6 text-red-200" />
-              <h2 className="text-xl font-bold text-white">System Alerts</h2>
-            </div>
-            <ul className="divide-y divide-gray-100">
-              {alerts.slice(0, 5).map((a) => (
-                <li key={a.id} className="px-5 py-4 flex items-start gap-3">
-                  <AlertTriangle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                    a.severity === 'critical' ? 'text-red-500' : 'text-yellow-500'
-                  }`} />
-                  <div>
-                    <p className="font-semibold text-gray-800">[{a.service_name}] {a.message}</p>
-                    <p className="text-xs text-gray-400">{new Date(a.created_at).toLocaleString()}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+        {!selectedElderId ? (
+          <div className="text-center py-20 bg-white/50 backdrop-blur-md rounded-[2rem] border border-white/60 shadow-lg">
+            <User className="w-20 h-20 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-600">No Elder Selected</h2>
+            <p className="text-gray-500 mt-2">Please link an elder using their username above.</p>
           </div>
+        ) : (
+          <>
+            {/* Title row */}
+            <div className="flex items-center justify-between mb-6 px-2">
+              <div>
+                <p className="text-indigo-600 font-bold uppercase tracking-widest text-sm">Status Dashboard</p>
+                <h1 className="text-5xl font-extrabold text-gray-900 capitalize drop-shadow-sm mt-1">
+                  {elderName}'s Health
+                </h1>
+              </div>
+              <div className="text-right text-sm font-medium text-gray-500 bg-white/60 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-500" />
+                Updated: {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+
+            {/* Partial error banner */}
+            {fetchError && (
+              <div className="mb-6 bg-red-50 border-l-4 border-red-500 text-red-800 rounded-xl p-5 shadow-sm font-medium">
+                ⚠️ {fetchError}
+              </div>
+            )}
+
+            {/* Status hero card */}
+            <div className={`rounded-[2rem] shadow-xl p-10 mb-8 flex flex-col md:flex-row md:items-center justify-between text-white relative overflow-hidden border border-white/20 ${
+              loading
+                ? 'bg-gradient-to-r from-gray-400 to-gray-500'
+                : latestLog
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+                  : 'bg-gradient-to-r from-gray-500 to-gray-600'
+            }`}>
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+              <div className="flex items-center gap-6 relative z-10">
+                <div className="bg-white/20 backdrop-blur-md rounded-2xl p-6 shadow-inner">
+                  <User className="w-16 h-16" />
+                </div>
+                <div>
+                  <p className="text-xl opacity-90 font-medium tracking-wide">Overall Status</p>
+                  <p className="text-6xl font-extrabold mt-1 drop-shadow-md">
+                    {loading ? 'Loading…' : latestLog ? 'Doing Well 😊' : 'No Data Yet'}
+                  </p>
+                  {latestLog && (
+                    <p className="opacity-80 font-medium mt-3 bg-black/10 inline-block px-4 py-1.5 rounded-full">
+                      Last check-in: {new Date(latestLog.created_at).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {latestLog && !loading && <CheckCircle2 className="w-32 h-32 opacity-20 absolute right-10 bottom-auto pointer-events-none" />}
+            </div>
+
+            {/* Stat cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+              <StatCard icon={HeartPulse} label="Heart Rate" value={latestHR ? `${latestHR} bpm` : null} bgGradient="from-red-50 to-pink-50" iconColor="text-red-500" />
+              <StatCard icon={TrendingUp} label="Blood Pressure" value={latestBP} bgGradient="from-blue-50 to-indigo-50" iconColor="text-blue-500" />
+              <StatCard icon={CheckCircle2} label="Check-ins Today" value={checkIns} bgGradient="from-green-50 to-emerald-50" iconColor="text-green-500" />
+              <StatCard icon={Pill} label="Meds Taken" value={medsTotal > 0 ? `${medsTaken}/${medsTotal}` : '—'} bgGradient="from-purple-50 to-fuchsia-50" iconColor="text-purple-500" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+              {/* Medication Section (Takes 2 columns) */}
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                
+                {/* Add Medication Form */}
+                <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-lg p-6 border border-white/60">
+                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <Plus className="w-6 h-6 text-indigo-600" /> Add Medication
+                  </h2>
+                  <form onSubmit={handleAddMed} className="flex flex-col md:flex-row gap-4">
+                    <input type="text" placeholder="Medication Name" value={medForm.name} onChange={e=>setMedForm({...medForm, name: e.target.value})} className="flex-1 bg-gray-50 border-2 border-indigo-100 rounded-xl px-4 py-3 font-medium text-gray-800 focus:border-indigo-400 focus:outline-none" required />
+                    <input type="text" placeholder="Dosage (e.g. 1 pill)" value={medForm.dosage} onChange={e=>setMedForm({...medForm, dosage: e.target.value})} className="w-full md:w-40 bg-gray-50 border-2 border-indigo-100 rounded-xl px-4 py-3 font-medium text-gray-800 focus:border-indigo-400 focus:outline-none" required />
+                    <input type="time" value={medForm.time} onChange={e=>setMedForm({...medForm, time: e.target.value})} className="w-full md:w-32 bg-gray-50 border-2 border-indigo-100 rounded-xl px-4 py-3 font-bold text-gray-800 focus:border-indigo-400 focus:outline-none" required />
+                    <button type="submit" disabled={medLoading} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold px-8 py-3 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50">
+                      {medLoading ? 'Adding...' : 'Add'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Medication Tracker */}
+                <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-lg overflow-hidden border border-white/60">
+                  <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-5 flex items-center gap-3">
+                    <Pill className="w-8 h-8 text-white/90" />
+                    <h2 className="text-2xl font-extrabold text-white">Medication Tracker</h2>
+                  </div>
+                  {reminders.length === 0 ? (
+                    <p className="text-gray-400 text-center py-12 font-medium">
+                      {loading ? 'Loading…' : 'No medications scheduled.'}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100">
+                      {reminders.map((r) => (
+                        <li key={r.id} className="flex items-center justify-between px-8 py-5 hover:bg-purple-50/30 transition-colors">
+                          <div className="flex flex-col">
+                            <p className="text-xl font-extrabold text-gray-800 tracking-tight">{r.medication_name}</p>
+                            <p className="text-purple-600 font-semibold">{r.dosage} &bull; {r.time_of_day?.slice(0, 5)}</p>
+                          </div>
+                          {r.taken
+                            ? <span className="flex items-center gap-2 text-green-600 bg-green-100 px-4 py-2 rounded-full font-bold shadow-sm border border-green-200"><CheckCircle2 className="w-5 h-5" /> Taken</span>
+                            : <span className="flex items-center gap-2 text-yellow-600 bg-yellow-100 px-4 py-2 rounded-full font-bold shadow-sm border border-yellow-200"><XCircle className="w-5 h-5" /> Pending</span>
+                          }
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Health Logs & Alerts */}
+              <div className="flex flex-col gap-6">
+                
+                {/* Alerts */}
+                {alerts.length > 0 && (
+                  <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-lg overflow-hidden border border-white/60">
+                    <div className="bg-gradient-to-r from-red-600 to-rose-500 px-6 py-4 flex items-center gap-2">
+                      <Bell className="w-6 h-6 text-white/90" />
+                      <h2 className="text-xl font-bold text-white">System Alerts</h2>
+                    </div>
+                    <ul className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                      {alerts.slice(0, 5).map((a) => (
+                        <li key={a.id} className="px-6 py-4 flex items-start gap-3">
+                          <AlertTriangle className={`w-6 h-6 mt-0.5 flex-shrink-0 ${
+                            a.severity === 'critical' ? 'text-red-500' : 'text-yellow-500'
+                          }`} />
+                          <div>
+                            <p className="font-bold text-gray-800 leading-tight">[{a.service_name}] {a.message}</p>
+                            <p className="text-xs text-gray-400 mt-1 font-medium">{new Date(a.created_at).toLocaleString()}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Health log feed */}
+                <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-lg overflow-hidden border border-white/60 flex-1">
+                  <div className="bg-gradient-to-r from-blue-600 to-indigo-500 px-6 py-4 flex items-center gap-2">
+                    <TrendingUp className="w-6 h-6 text-white/90" />
+                    <h2 className="text-xl font-bold text-white">Recent Health Logs</h2>
+                  </div>
+                  {healthLogs.length === 0 ? (
+                    <p className="text-gray-400 text-center py-12 font-medium">
+                      {loading ? 'Loading…' : 'No health logs yet.'}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                      {healthLogs.map((log) => (
+                        <li key={log.id} className="flex flex-col px-6 py-4 hover:bg-blue-50/30 transition-colors">
+                          <div className="flex items-center justify-between mb-2">
+                            <StatusBadge status={log.status} />
+                            <p className="text-xs text-gray-400 font-medium">
+                              {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          {log.heart_rate && (
+                            <p className="text-sm font-semibold text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                              HR: <span className="text-red-500">{log.heart_rate} bpm</span> &bull; BP: <span className="text-blue-500">{log.blood_pressure}</span>
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </>
         )}
       </main>
     </div>

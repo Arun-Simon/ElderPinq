@@ -27,6 +27,20 @@ app.get('/health', (req, res) =>
   res.status(200).json({ status: 'ok', service: 'auth-service' })
 );
 
+const authenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authorization header missing or malformed' });
+  }
+  try {
+    const token = authHeader.split(' ')[1];
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
 app.post('/register', async (req, res) => {
   try {
     const { username, password, role } = req.body;
@@ -73,22 +87,16 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.get('/me', async (req, res) => {
+app.get('/me', authenticate, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authorization header missing or malformed' });
-    }
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
     const result = await pool.query(
       'SELECT id, username, role FROM users WHERE id = $1',
-      [decoded.userId]
+      [req.user.userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(401).json({ error: 'Invalid or expired token' });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -106,6 +114,61 @@ app.get('/users/:id', async (req, res) => {
   }
 });
 
+// Link family to elder
+app.post('/link', authenticate, async (req, res) => {
+  try {
+    const { elderUsername } = req.body;
+    const familyId = req.user.userId;
+
+    // Find elder
+    const elderRes = await pool.query('SELECT id, role FROM users WHERE username = $1', [elderUsername]);
+    if (elderRes.rows.length === 0) return res.status(404).json({ error: 'Elder username not found' });
+    const elder = elderRes.rows[0];
+    if (elder.role !== 'elder') return res.status(400).json({ error: 'User is not registered as an elder' });
+
+    // Create link
+    await pool.query(
+      'INSERT INTO family_links (family_id, elder_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [familyId, elder.id]
+    );
+    res.status(201).json({ success: true, elderId: elder.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get elders linked to a family member
+app.get('/links/elders', authenticate, async (req, res) => {
+  try {
+    const familyId = req.user.userId;
+    const result = await pool.query(
+      `SELECT u.id, u.username, u.role FROM users u
+       JOIN family_links f ON u.id = f.elder_id
+       WHERE f.family_id = $1`,
+      [familyId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get family members linked to an elder
+app.get('/links/family', authenticate, async (req, res) => {
+  try {
+    const elderId = req.user.userId;
+    const result = await pool.query(
+      `SELECT u.id, u.username, u.role FROM users u
+       JOIN family_links f ON u.id = f.family_id
+       WHERE f.elder_id = $1`,
+      [elderId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ──────────────────────────────────────────────
 // SEED — creates demo users if the table is empty
 // ──────────────────────────────────────────────
@@ -118,6 +181,7 @@ async function seedDemoUsers() {
     }
     const elderHash  = await bcrypt.hash('password123', 10);
     const familyHash = await bcrypt.hash('password123', 10);
+    
     await pool.query(
       `INSERT INTO users (username, password, role) VALUES
         ($1, $2, 'elder'),
@@ -125,6 +189,19 @@ async function seedDemoUsers() {
        ON CONFLICT (username) DO NOTHING`,
       ['grandma', elderHash, 'daughter', familyHash]
     );
+    
+    // Seed link
+    const users = await pool.query('SELECT id, username FROM users WHERE username IN ($1, $2)', ['grandma', 'daughter']);
+    const grandma = users.rows.find(u => u.username === 'grandma');
+    const daughter = users.rows.find(u => u.username === 'daughter');
+    
+    if (grandma && daughter) {
+      await pool.query(
+        'INSERT INTO family_links (family_id, elder_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [daughter.id, grandma.id]
+      );
+    }
+    
     console.log("✅ Demo users seeded → grandma (elder) / daughter (family) — password: password123");
   } catch (err) {
     console.error('⚠️  Seeding failed:', err.message);
