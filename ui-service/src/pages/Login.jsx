@@ -16,13 +16,28 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      // authApi.login persists token+user to localStorage automatically
+      // Guard: if the module failed to load (stale Docker build),
+      // show an actionable message instead of a cryptic JS error.
+      if (typeof login !== 'function') {
+        throw new Error(
+          'App bundle is outdated. Run: docker compose up --build -d and hard-refresh.'
+        );
+      }
       const data = await login(username, password);
+      if (!data?.user) {
+        throw new Error('Unexpected response from server. Please try again.');
+      }
       if (data.user.role === 'elder') navigate('/elder');
       else navigate('/family');
     } catch (err) {
-      // err.message is the actual backend error or connectivity message
-      setError(err.message);
+      // Surface the real backend message; avoid leaking JS internals
+      const msg = err?.message || 'An unexpected error occurred.';
+      // Hide raw JS errors (ReferenceError, TypeError) behind a friendly message
+      if (msg.includes('is not a function') || msg.includes('is not defined')) {
+        setError('App bundle is outdated — please run: docker compose up --build -d');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,10 @@
-version: "3.8"
 
 services:
   # ==================================
-  # FRONTEND
+  # FRONTEND — nginx serves the React
+  # SPA and reverse-proxies all /api/*
+  # traffic to the backend services
+  # over the internal Docker network.
   # ==================================
   ui-service:
     build:
@@ -32,9 +34,9 @@ services:
       - DB_HOST=auth-db
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=password
+      - DB_PASSWORD=${DB_PASSWORD:-password}
       - DB_NAME=users_db
-      - JWT_SECRET=supersecretjwt
+      - JWT_SECRET=${JWT_SECRET:-supersecretjwt_change_in_production}
       - PORT=3000
     depends_on:
       auth-db:
@@ -53,7 +55,7 @@ services:
       - DB_HOST=health-db
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=password
+      - DB_PASSWORD=${DB_PASSWORD:-password}
       - DB_NAME=health_db
       - PORT=3000
     depends_on:
@@ -73,7 +75,7 @@ services:
       - DB_HOST=reminder-db
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=password
+      - DB_PASSWORD=${DB_PASSWORD:-password}
       - DB_NAME=reminder_db
       - PORT=3000
     depends_on:
@@ -93,7 +95,7 @@ services:
       - DB_HOST=alert-db
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=password
+      - DB_PASSWORD=${DB_PASSWORD:-password}
       - DB_NAME=alert_db
       - PORT=3000
     depends_on:
@@ -104,15 +106,17 @@ services:
     restart: unless-stopped
 
   # ==================================
-  # DATABASES
+  # DATABASES — each service gets its
+  # own isolated PostgreSQL instance
   # ==================================
   auth-db:
     image: postgres:15-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
       - POSTGRES_DB=users_db
     volumes:
+      - auth-db-data:/var/lib/postgresql/data
       - ./db-init/auth-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - elderping-network
@@ -120,16 +124,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d users_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: unless-stopped
 
   health-db:
     image: postgres:15-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
       - POSTGRES_DB=health_db
     volumes:
+      - health-db-data:/var/lib/postgresql/data
       - ./db-init/health-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - elderping-network
@@ -137,16 +142,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d health_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: unless-stopped
 
   reminder-db:
     image: postgres:15-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
       - POSTGRES_DB=reminder_db
     volumes:
+      - reminder-db-data:/var/lib/postgresql/data
       - ./db-init/reminder-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - elderping-network
@@ -154,16 +160,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d reminder_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: unless-stopped
 
   alert-db:
     image: postgres:15-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
       - POSTGRES_DB=alert_db
     volumes:
+      - alert-db-data:/var/lib/postgresql/data
       - ./db-init/alert-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - elderping-network
@@ -171,8 +178,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d alert_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: unless-stopped
+
+# ==================================
+# Named volumes for data persistence
+# ==================================
+volumes:
+  auth-db-data:
+  health-db-data:
+  reminder-db-data:
+  alert-db-data:
 
 networks:
   elderping-network:
