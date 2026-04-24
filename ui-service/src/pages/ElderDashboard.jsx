@@ -140,6 +140,12 @@ export default function ElderDashboard() {
             <div>
               <p className="text-indigo-600 font-bold uppercase tracking-widest text-sm mb-1">Welcome Back</p>
               <h1 className="text-4xl font-extrabold text-gray-900 drop-shadow-sm capitalize">{user?.username || 'Friend'}</h1>
+              {user?.invite_code && (
+                <div className="mt-2 inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg shadow-sm">
+                  <span className="text-xs font-bold text-indigo-500 uppercase">Invite Code:</span>
+                  <span className="text-sm font-mono font-extrabold text-indigo-800 tracking-wider">{user.invite_code}</span>
+                </div>
+              )}
             </div>
           </div>
           

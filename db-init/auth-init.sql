@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   username   VARCHAR(50) UNIQUE NOT NULL,
   password   VARCHAR(255) NOT NULL,
   role       VARCHAR(20) DEFAULT 'family', -- 'elder' | 'family'
+  invite_code VARCHAR(10) UNIQUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -30,8 +30,8 @@ export const getMe = () => client.get(`${BASE}/me`);
  */
 export const getUserById = (id) => client.get(`${BASE}/users/${id}`);
 
-/** Link family to elder by username */
-export const linkElder = (elderUsername) => client.post(`${BASE}/link`, { elderUsername });
+/** Link family to elder by invite code */
+export const linkElder = (inviteCode) => client.post(`${BASE}/link`, { inviteCode });
 
 /** Get all elders linked to the logged-in family member */
 export const getLinkedElders = () => client.get(`${BASE}/links/elders`);

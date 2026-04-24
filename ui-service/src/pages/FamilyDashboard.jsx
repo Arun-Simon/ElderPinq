@@ -51,7 +51,7 @@ export default function FamilyDashboard() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   // Link form
-  const [linkUsername, setLinkUsername] = useState('');
+  const [linkCode, setLinkCode] = useState('');
   const [linkLoading, setLinkLoading] = useState(false);
 
   // Add Med form
@@ -116,11 +116,11 @@ export default function FamilyDashboard() {
 
   const handleLinkElder = async (e) => {
     e.preventDefault();
-    if (!linkUsername) return;
+    if (!linkCode) return;
     setLinkLoading(true);
     try {
-      const res = await linkElder(linkUsername);
-      setLinkUsername('');
+      const res = await linkElder(linkCode);
+      setLinkCode('');
       await fetchElders();
       setSelectedElderId(res.data?.elderId || res.elderId); // Handle axios response structure correctly
     } catch (err) {
@@ -246,9 +246,9 @@ export default function FamilyDashboard() {
             <form onSubmit={handleLinkElder} className="flex gap-3">
               <input 
                 type="text" 
-                placeholder="Elder's username" 
-                value={linkUsername}
-                onChange={e => setLinkUsername(e.target.value)}
+                placeholder="Elder's Invite Code" 
+                value={linkCode}
+                onChange={e => setLinkCode(e.target.value.toUpperCase())}
                 className="flex-1 rounded-xl px-4 py-3 text-gray-900 font-medium focus:outline-none focus:ring-4 focus:ring-indigo-300"
               />
               <button 
@@ -266,7 +266,7 @@ export default function FamilyDashboard() {
           <div className="text-center py-20 bg-white/50 backdrop-blur-md rounded-[2rem] border border-white/60 shadow-lg">
             <User className="w-20 h-20 text-gray-300 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-600">No Elder Selected</h2>
-            <p className="text-gray-500 mt-2">Please link an elder using their username above.</p>
+            <p className="text-gray-500 mt-2">Please link an elder using their invite code above.</p>
           </div>
         ) : (
           <>
