@@ -6,7 +6,7 @@ RUN npm ci --only=production
 COPY src ./src
 
 # Stage 2: Production
-FROM node:18-alpine
+FROM node:18-alpine AS production
 WORKDIR /usr/src/app
 # Set non-root user
 USER node
