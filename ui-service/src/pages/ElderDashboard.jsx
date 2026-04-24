@@ -225,6 +225,8 @@ export default function ElderDashboard() {
                   placeholder="e.g. 120/80" 
                   value={vitalsForm.bloodPressure} 
                   onChange={e => setVitalsForm({...vitalsForm, bloodPressure: e.target.value})} 
+                  pattern="\d{2,3}/\d{2,3}"
+                  title="Please enter blood pressure in the format SYS/DIA (e.g., 120/80)"
                   className="w-full bg-gray-50 border-2 border-indigo-100 rounded-2xl px-5 py-4 text-xl font-bold text-gray-800 focus:outline-none focus:border-indigo-400 transition-colors" 
                   required 
                 />

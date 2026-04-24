@@ -164,6 +164,27 @@ export default function FamilyDashboard() {
   const latestBP   = healthLogs.find((l) => l.blood_pressure)?.blood_pressure;
   const checkIns   = healthLogs.filter((l) => l.status === 'feeling_well').length;
 
+  let overallStatus = 'Doing Well 😊';
+  let isWarning = false;
+
+  if (latestHR || latestBP) {
+    let sys = 120, dia = 80;
+    if (latestBP && latestBP.includes('/')) {
+      [sys, dia] = latestBP.split('/').map(Number);
+    }
+    
+    if (
+      (latestHR && (latestHR < 60 || latestHR > 100)) || 
+      (latestBP && (sys < 90 || sys > 140 || dia < 60 || dia > 90))
+    ) {
+      overallStatus = 'Needs Attention ⚠️';
+      isWarning = true;
+    }
+  } else if (latestLog && latestLog.status !== 'feeling_well' && latestLog.status !== 'vitals_logged') {
+    overallStatus = 'Needs Attention ⚠️';
+    isWarning = true;
+  }
+
   const handleLogout = () => { logout(); navigate('/login'); };
 
   return (
@@ -274,9 +295,11 @@ export default function FamilyDashboard() {
             <div className={`rounded-[2rem] shadow-xl p-10 mb-8 flex flex-col md:flex-row md:items-center justify-between text-white relative overflow-hidden border border-white/20 ${
               loading
                 ? 'bg-gradient-to-r from-gray-400 to-gray-500'
-                : latestLog
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-                  : 'bg-gradient-to-r from-gray-500 to-gray-600'
+                : !latestLog
+                  ? 'bg-gradient-to-r from-gray-500 to-gray-600'
+                  : isWarning
+                    ? 'bg-gradient-to-r from-red-500 to-rose-600'
+                    : 'bg-gradient-to-r from-green-500 to-emerald-600'
             }`}>
               <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
               <div className="flex items-center gap-6 relative z-10">
@@ -286,7 +309,7 @@ export default function FamilyDashboard() {
                 <div>
                   <p className="text-xl opacity-90 font-medium tracking-wide">Overall Status</p>
                   <p className="text-6xl font-extrabold mt-1 drop-shadow-md">
-                    {loading ? 'Loading…' : latestLog ? 'Doing Well 😊' : 'No Data Yet'}
+                    {loading ? 'Loading…' : latestLog ? overallStatus : 'No Data Yet'}
                   </p>
                   {latestLog && (
                     <p className="opacity-80 font-medium mt-3 bg-black/10 inline-block px-4 py-1.5 rounded-full">
@@ -295,7 +318,11 @@ export default function FamilyDashboard() {
                   )}
                 </div>
               </div>
-              {latestLog && !loading && <CheckCircle2 className="w-32 h-32 opacity-20 absolute right-10 bottom-auto pointer-events-none" />}
+              {latestLog && !loading && (
+                isWarning 
+                  ? <AlertTriangle className="w-32 h-32 opacity-20 absolute right-10 bottom-auto pointer-events-none" />
+                  : <CheckCircle2 className="w-32 h-32 opacity-20 absolute right-10 bottom-auto pointer-events-none" />
+              )}
             </div>
 
             {/* Stat cards */}
