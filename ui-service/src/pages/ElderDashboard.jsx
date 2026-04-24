@@ -1,23 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  CheckCircle2, Pill, HeartPulse, LogOut, Clock, User, Smile, AlertCircle
-} from 'lucide-react';
-
-const HEALTH_SERVICE_URL = import.meta.env.VITE_HEALTH_SERVICE_URL || 'http://localhost:3002';
-const REMINDER_SERVICE_URL = import.meta.env.VITE_REMINDER_SERVICE_URL || 'http://localhost:3003';
+import { CheckCircle2, Pill, HeartPulse, LogOut, Clock, User, Smile } from 'lucide-react';
+import { getCachedUser, logout } from '../api/authApi';
+import { checkIn } from '../api/healthApi';
+import { getReminders, markTaken } from '../api/reminderApi';
 
 export default function ElderDashboard() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = getCachedUser();
 
-  const [reminders, setReminders] = useState([]);
-  const [checkedIn, setCheckedIn] = useState(false);
+  const [reminders, setReminders]         = useState([]);
+  const [checkedIn, setCheckedIn]         = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
-  const [medLoading, setMedLoading] = useState(null);
+  const [medLoading, setMedLoading]       = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
-  const [statusType, setStatusType] = useState('');
-  const [time, setTime] = useState(new Date());
+  const [statusType, setStatusType]       = useState('success');
+  const [time, setTime]                   = useState(new Date());
+  const [remindersError, setRemindersError] = useState('');
+
+  // Redirect if not logged in or wrong role
+  useEffect(() => {
+    if (!user || user.role !== 'elder') {
+      navigate('/login', { replace: true });
+    }
+  }, []);
 
   // Live clock
   useEffect(() => {
@@ -25,33 +31,28 @@ export default function ElderDashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Load reminders
+  // Load reminders on mount
   useEffect(() => {
-    if (!user.id) return;
-    fetch(`${REMINDER_SERVICE_URL}/reminders/${user.id}`)
-      .then((r) => r.json())
+    if (!user?.id) return;
+    getReminders(user.id)
       .then(setReminders)
-      .catch(() => setReminders([]));
-  }, [user.id]);
+      .catch((err) => setRemindersError(err.message));
+  }, [user?.id]);
 
   const showStatus = (msg, type = 'success') => {
     setStatusMessage(msg);
     setStatusType(type);
-    setTimeout(() => setStatusMessage(''), 4000);
+    setTimeout(() => setStatusMessage(''), 4500);
   };
 
   const handleCheckIn = async () => {
     setCheckInLoading(true);
     try {
-      await fetch(`${HEALTH_SERVICE_URL}/checkin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, status: 'feeling_well' }),
-      });
+      await checkIn(user.id, 'feeling_well');
       setCheckedIn(true);
-      showStatus("✅ Check-in recorded! Your family has been notified.", 'success');
-    } catch {
-      showStatus("⚠️ Could not connect. Please try again.", 'error');
+      showStatus('✅ Check-in recorded! Your family has been notified.', 'success');
+    } catch (err) {
+      showStatus(`⚠️ ${err.message}`, 'error');
     } finally {
       setCheckInLoading(false);
     }
@@ -60,20 +61,20 @@ export default function ElderDashboard() {
   const handleMedTaken = async (reminder) => {
     setMedLoading(reminder.id);
     try {
-      await fetch(`${REMINDER_SERVICE_URL}/reminders/${reminder.id}/take`, { method: 'PUT' });
+      await markTaken(reminder.id);
       setReminders((prev) =>
         prev.map((r) => (r.id === reminder.id ? { ...r, taken: true } : r))
       );
       showStatus(`💊 "${reminder.medication_name}" marked as taken!`, 'success');
-    } catch {
-      showStatus("⚠️ Could not update. Please try again.", 'error');
+    } catch (err) {
+      showStatus(`⚠️ ${err.message}`, 'error');
     } finally {
       setMedLoading(null);
     }
   };
 
   const handleLogout = () => {
-    localStorage.clear();
+    logout();
     navigate('/login');
   };
 
@@ -111,7 +112,7 @@ export default function ElderDashboard() {
           </div>
           <div>
             <p className="text-gray-500 text-lg">Good day,</p>
-            <h1 className="text-4xl font-extrabold text-gray-900">{user.username || 'Friend'}</h1>
+            <h1 className="text-4xl font-extrabold text-gray-900">{user?.username || 'Friend'}</h1>
           </div>
         </div>
 
@@ -126,9 +127,8 @@ export default function ElderDashboard() {
           </div>
         )}
 
-        {/* --- BIG ACTION BUTTONS --- */}
-        <div className="grid grid-cols-1 gap-6 mb-8">
-          {/* Check-In Button */}
+        {/* BIG Check-In Button */}
+        <div className="mb-8">
           <button
             id="checkin-btn"
             onClick={handleCheckIn}
@@ -144,9 +144,11 @@ export default function ElderDashboard() {
             ) : (
               <CheckCircle2 className="w-16 h-16" strokeWidth={1.5} />
             )}
-            {checkedIn ? 'Checked In! ✓' : checkInLoading ? 'Sending...' : "I'm Doing Well"}
+            {checkedIn ? 'Checked In! ✓' : checkInLoading ? 'Sending…' : "I'm Doing Well"}
             <span className="text-lg font-normal opacity-80">
-              {checkedIn ? 'Your family knows you are safe.' : 'Tap to let your family know'}
+              {checkedIn
+                ? 'Your family knows you are safe.'
+                : 'Tap to let your family know'}
             </span>
           </button>
         </div>
@@ -158,7 +160,9 @@ export default function ElderDashboard() {
             <h2 className="text-2xl font-extrabold text-white">Today's Medications</h2>
           </div>
 
-          {reminders.length === 0 ? (
+          {remindersError ? (
+            <p className="text-center text-red-500 py-8 text-lg">{remindersError}</p>
+          ) : reminders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-3">
               <Smile className="w-14 h-14" />
               <p className="text-xl">No medications scheduled.</p>
@@ -173,7 +177,7 @@ export default function ElderDashboard() {
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-gray-800">{r.medication_name}</p>
-                      <p className="text-gray-500 text-lg">{r.dosage} &bull; {r.time_of_day?.slice(0,5)}</p>
+                      <p className="text-gray-500 text-lg">{r.dosage} &bull; {r.time_of_day?.slice(0, 5)}</p>
                     </div>
                   </div>
                   <button
@@ -186,7 +190,7 @@ export default function ElderDashboard() {
                         : 'bg-indigo-700 hover:bg-indigo-800 text-white shadow-md'
                     }`}
                   >
-                    {medLoading === r.id ? '...' : r.taken ? '✓ Taken' : 'Mark Taken'}
+                    {medLoading === r.id ? '…' : r.taken ? '✓ Taken' : 'Mark Taken'}
                   </button>
                 </li>
               ))}

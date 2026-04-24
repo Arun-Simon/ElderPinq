@@ -1,36 +1,27 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { HeartPulse, LogIn, Eye, EyeOff } from 'lucide-react';
-
-const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:3001';
+import { login } from '../api/authApi';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [username, setUsername]   = useState('');
+  const [password, setPassword]   = useState('');
+  const [showPass, setShowPass]   = useState(false);
+  const [error, setError]         = useState('');
+  const [loading, setLoading]     = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${AUTH_SERVICE_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Login failed');
-
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-
+      // authApi.login persists token+user to localStorage automatically
+      const data = await login(username, password);
       if (data.user.role === 'elder') navigate('/elder');
       else navigate('/family');
     } catch (err) {
+      // err.message is the actual backend error or connectivity message
       setError(err.message);
     } finally {
       setLoading(false);
@@ -40,7 +31,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
-        {/* Logo / Branding */}
+        {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-full shadow-2xl mb-4">
             <HeartPulse className="w-14 h-14 text-blue-700" strokeWidth={1.5} />
@@ -115,10 +106,21 @@ export default function Login() {
             </button>
           </form>
 
-          <p className="text-center text-gray-500 text-base mt-6">
-            Redirects to <strong>Elder</strong> or <strong>Family</strong> view based on your role.
+          <p className="text-center text-gray-500 text-lg mt-8">
+            Don&apos;t have an account?{' '}
+            <Link
+              id="go-to-register"
+              to="/register"
+              className="text-blue-700 font-bold hover:underline"
+            >
+              Register here
+            </Link>
           </p>
         </div>
+
+        <p className="text-center text-blue-300 text-sm mt-6">
+          Demo: elder / password123 &bull; family / password123
+        </p>
       </div>
     </div>
   );
