@@ -1,42 +1,64 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { HeartPulse, LogIn, Eye, EyeOff } from 'lucide-react';
-import { login } from '../api/authApi';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername]   = useState('');
-  const [password, setPassword]   = useState('');
-  const [showPass, setShowPass]   = useState(false);
-  const [error, setError]         = useState('');
-  const [loading, setLoading]     = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
     try {
-      // Guard: if the module failed to load (stale Docker build),
-      // show an actionable message instead of a cryptic JS error.
-      if (typeof login !== 'function') {
-        throw new Error(
-          'App bundle is outdated. Run: docker compose up --build -d and hard-refresh.'
-        );
+      // Inline fetch — no external module dependency
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Server returned an unexpected response. Please try again.');
       }
-      const data = await login(username, password);
-      if (!data?.user) {
-        throw new Error('Unexpected response from server. Please try again.');
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || 'Sign in failed. Please check your credentials.');
       }
+
+      if (!data?.token || !data?.user) {
+        throw new Error('Sign in failed. Please try again.');
+      }
+
+      // Persist session
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      // Route based on role
       if (data.user.role === 'elder') navigate('/elder');
       else navigate('/family');
+
     } catch (err) {
-      // Surface the real backend message; avoid leaking JS internals
-      const msg = err?.message || 'An unexpected error occurred.';
-      // Hide raw JS errors (ReferenceError, TypeError) behind a friendly message
-      if (msg.includes('is not a function') || msg.includes('is not defined')) {
-        setError('App bundle is outdated — please run: docker compose up --build -d');
+      // Only show user-safe messages — never expose internals
+      const raw = err?.message || '';
+      if (
+        !raw ||
+        raw.includes('is not defined') ||
+        raw.includes('is not a function') ||
+        raw.includes('Cannot read') ||
+        raw.includes('SyntaxError')
+      ) {
+        setError('Something went wrong. Please refresh the page and try again.');
       } else {
-        setError(msg);
+        setError(raw);
       }
     } finally {
       setLoading(false);
@@ -46,6 +68,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
+
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-full shadow-2xl mb-4">
@@ -60,7 +83,11 @@ export default function Login() {
           <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">Sign In</h2>
 
           {error && (
-            <div className="mb-6 bg-red-50 border-2 border-red-400 text-red-700 rounded-xl p-4 text-lg font-medium text-center">
+            <div
+              id="login-error"
+              role="alert"
+              className="mb-6 bg-red-50 border-2 border-red-400 text-red-700 rounded-xl p-4 text-lg font-medium text-center"
+            >
               {error}
             </div>
           )}
@@ -77,6 +104,7 @@ export default function Login() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter your username"
                 required
+                autoComplete="username"
                 className="w-full border-2 border-gray-300 rounded-xl px-5 py-4 text-xl text-gray-800 focus:outline-none focus:border-blue-600 transition-colors"
               />
             </div>
@@ -93,6 +121,7 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
+                  autoComplete="current-password"
                   className="w-full border-2 border-gray-300 rounded-xl px-5 py-4 text-xl text-gray-800 focus:outline-none focus:border-blue-600 transition-colors pr-16"
                 />
                 <button
@@ -117,7 +146,7 @@ export default function Login() {
               ) : (
                 <LogIn className="w-7 h-7" />
               )}
-              {loading ? 'Signing In...' : 'Sign In'}
+              {loading ? 'Signing In…' : 'Sign In'}
             </button>
           </form>
 
@@ -133,9 +162,6 @@ export default function Login() {
           </p>
         </div>
 
-        <p className="text-center text-blue-300 text-sm mt-6">
-          Demo: elder / password123 &bull; family / password123
-        </p>
       </div>
     </div>
   );
