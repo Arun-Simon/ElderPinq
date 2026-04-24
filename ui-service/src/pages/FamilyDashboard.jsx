@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { getCachedUser, logout, getLinkedElders, linkElder, getUserById } from '../api/authApi';
 import { getVitals } from '../api/healthApi';
-import { addReminder, getReminders } from '../api/reminderApi';
+import { createReminder as addReminder, getReminders } from '../api/reminderApi';
 import { getAlerts } from '../api/alertApi';
 
 function StatusBadge({ status }) {
