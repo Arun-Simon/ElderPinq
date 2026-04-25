@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: ghcr.io/arun-simon/elderpinq/auth-service:latest
+          image: arunnsimon/elderpinq-auth-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

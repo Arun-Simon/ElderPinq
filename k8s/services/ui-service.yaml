@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: ui-service
-          image: ghcr.io/arun-simon/elderpinq/ui-service:latest
+          image: arunnsimon/elderpinq-ui-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80

@@ -4,7 +4,6 @@
 # Requires: kgateway installed in the cluster.
 # Install:  https://kgateway.dev/docs/installation/
 # =============================================================
-
 # GatewayClass — use the kgateway controller
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -12,7 +11,6 @@ metadata:
   name: kgateway
 spec:
   controllerName: kgateway.dev/kgateway
-
 ---
 # Gateway — listen on port 80 for HTTP traffic
 apiVersion: gateway.networking.k8s.io/v1
@@ -29,10 +27,8 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
-
 ---
-# HTTPRoute — route all traffic to the ui-service
-# The Nginx in ui-service handles /api/* proxying internally
+# HTTPRoute — route traffic to each backend service with path rewriting
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -43,42 +39,70 @@ spec:
     - name: elderping-gateway
       namespace: elderping
   rules:
-    # Route /api/auth/* to auth-service directly (optional bypass)
+    # /api/auth/* → auth-service /* (strips /api/auth prefix)
     - matches:
         - path:
             type: PathPrefix
             value: /api/auth
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
       backendRefs:
         - name: auth-service
           port: 3000
           weight: 1
-    # Route /api/health/* to health-service
+
+    # /api/health/* → health-service /* (strips /api/health prefix)
     - matches:
         - path:
             type: PathPrefix
             value: /api/health
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
       backendRefs:
         - name: health-service
           port: 3000
           weight: 1
-    # Route /api/reminder/* to reminder-service
+
+    # /api/reminder/* → reminder-service /* (strips /api/reminder prefix)
     - matches:
         - path:
             type: PathPrefix
             value: /api/reminder
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
       backendRefs:
         - name: reminder-service
           port: 3000
           weight: 1
-    # Route /api/alert/* to alert-service
+
+    # /api/alert/* → alert-service /* (strips /api/alert prefix)
     - matches:
         - path:
             type: PathPrefix
             value: /api/alert
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
       backendRefs:
         - name: alert-service
           port: 3000
           weight: 1
+
     # Default: all other traffic goes to the React UI
     - matches:
         - path:
