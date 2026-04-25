@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: health-service
-          image: ghcr.io/arun-simon/elderpinq/health-service:latest
+          image: arunnsimon/elderpinq-health-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
